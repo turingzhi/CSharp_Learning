@@ -1,0 +1,15 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "build Playground",
+            "type": "process",
+            "command": "/opt/homebrew/opt/dotnet/libexec/dotnet",
+            "args": [
+                "build",
+                "${workspaceFolder}/src/IssueTracker.Playground/IssueTracker.Playground.csproj"
+            ],
+            "problemMatcher": "$msCompile"
+        }
+    ]
+}

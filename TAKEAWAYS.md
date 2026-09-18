@@ -446,7 +446,347 @@ Common reminders:
 | Connection refused | App running and correct port |
 | Old behavior after editing | Rebuild/restart; rebuild Docker image when needed |
 
-## 19. Questions to answer in your own words
+## 19. C# fundamentals: classes, inheritance, and keywords
+
+These examples are independent learning snippets. They do not require changing IssueTracker's design.
+
+### Instance members versus static members
+
+An **instance member** belongs to a particular object. A **static member** belongs to the type itself.
+
+```csharp
+public class ProjectLabel
+{
+    public string Name { get; }
+
+    public ProjectLabel(string name)
+    {
+        Name = name;
+    }
+
+    public string Describe() => $"Project: {Name}";
+
+    public static bool IsValidName(string name)
+        => !string.IsNullOrWhiteSpace(name);
+}
+
+// Usage inside a method:
+var project = new ProjectLabel("IssueTracker");
+string description = project.Describe();          // Needs an object.
+bool valid = ProjectLabel.IsValidName("My app");   // Called on the type.
+```
+
+A static method has no `this` object. It cannot directly read an instance's `Name`; it would need an object passed to it.
+
+### Static classes
+
+A static class groups operations that do not need instances. You cannot create it with `new`, inherit from it, or use instance members inside it.
+
+```csharp
+public static class TitleRules
+{
+    public static bool IsValid(string? title)
+        => !string.IsNullOrWhiteSpace(title);
+}
+
+// Usage:
+bool valid = TitleRules.IsValid("Fix login");
+```
+
+Use a static helper for a small operation that needs no object state. Services with dependencies such as a database or logger are usually easier to test and configure as injected instances.
+
+**Static is not the same as singleton:** a DI singleton is still an object, can implement an interface, and is created/managed by the DI container. A static class cannot be injected as an instance. Neither approach makes mutable shared state automatically thread-safe.
+
+### Access modifiers
+
+| Keyword | Who can access it? |
+| --- | --- |
+| `public` | Any code that can access the containing type |
+| `private` | Code inside the containing type |
+| `protected` | The containing class and derived classes |
+| `internal` | Code in the same assembly, usually the same project output |
+
+```csharp
+public string Title { get; private set; }
+```
+
+This allows public reading, but setting is private. Access modifiers help enforce which code may change an object's state.
+
+### Inheritance: an “is a” relationship
+
+Inheritance lets a derived class reuse and specialize a base class. A class can inherit from one base class and implement multiple interfaces.
+
+```csharp
+public class Notification
+{
+    public string Message { get; }
+
+    public Notification(string message)
+    {
+        Message = message;
+    }
+}
+
+public class EmailNotification : Notification
+{
+    public string Recipient { get; }
+
+    public EmailNotification(string message, string recipient)
+        : base(message)
+    {
+        Recipient = recipient;
+    }
+}
+```
+
+`EmailNotification` **is a** `Notification`. `base(message)` calls the base constructor. `this` refers to the current object; `base` lets derived code refer to base-class members or constructors.
+
+In IssueTracker, `ApplicationUser : IdentityUser` extends Identity's user type. Inheriting from a framework class gives your class its supported behavior and extension points.
+
+### Virtual and override
+
+`virtual` means a base class supplies behavior that a derived class is allowed to replace. `override` supplies that replacement.
+
+```csharp
+public class Notification
+{
+    public virtual string Format() => "General notification";
+}
+
+public class EmailNotification : Notification
+{
+    public override string Format() => "Email notification";
+}
+
+// Usage:
+Notification notification = new EmailNotification();
+Console.WriteLine(notification.Format()); // Email notification
+```
+
+The variable is declared as `Notification`, but the object is an `EmailNotification`. C# chooses the override on the actual object. This is **runtime polymorphism**.
+
+You can override inherited members that support overriding, such as `virtual`, `abstract`, or a non-sealed `override`. An ordinary non-virtual method cannot be overridden. Properties can also be virtual or abstract.
+
+Our EF configuration uses this pattern:
+
+```csharp
+protected override void OnModelCreating(ModelBuilder modelBuilder)
+{
+    base.OnModelCreating(modelBuilder);
+    // Add our entity mappings here.
+}
+```
+
+The override adds our configuration. Calling the base implementation preserves Identity's model configuration. Calling `base` is not mandatory in every override; it is necessary here for the intended framework behavior.
+
+### Abstract classes and abstract methods
+
+An abstract class is an incomplete base type. You cannot instantiate it directly. It can contain constructors, state, implemented methods, and abstract members.
+
+An abstract method declares what derived classes must implement, without providing its own method body.
+
+```csharp
+public abstract class Notification
+{
+    public string Message { get; }
+
+    protected Notification(string message)
+    {
+        Message = message;
+    }
+
+    public abstract string Format();
+
+    public string Preview() => $"Preview: {Format()}";
+}
+
+public class EmailNotification : Notification
+{
+    public EmailNotification(string message) : base(message) { }
+
+    public override string Format() => $"Email: {Message}";
+}
+
+// Usage:
+Notification notification = new EmailNotification("Work item assigned");
+Console.WriteLine(notification.Preview());
+// Preview: Email: Work item assigned
+```
+
+`new Notification(...)` would fail because the class is abstract. A concrete derived class must implement its inherited abstract members. An abstract derived class can leave them for later subclasses.
+
+**Virtual:** “Here is a default implementation; you may replace it.”
+
+**Abstract:** “You must provide an implementation before this can be a concrete class.”
+
+### Interfaces versus abstract classes
+
+An interface describes a capability that implementing types provide.
+
+```csharp
+public interface ITitleFormatter
+{
+    string Format(string title);
+}
+
+public class PlainTitleFormatter : ITitleFormatter
+{
+    public string Format(string title) => title.Trim();
+}
+```
+
+Implementing this interface method does not require `override`. The class fulfills an interface contract rather than replacing a base-class implementation.
+
+| Choose | When it helps |
+| --- | --- |
+| Interface | Different types need to provide the same capability |
+| Abstract class | Related types share instance state or implementation and need extension points |
+| Ordinary class | The type is complete and can be instantiated |
+| Static class | Operations need no instances |
+
+Modern interfaces have additional features, including default implementations, but they do not provide ordinary per-object fields or instance constructors like a base class does.
+
+Avoid adding an interface to every class automatically. Add one when a meaningful contract, interchangeable implementation, or dependency boundary helps.
+
+### Composition: a “has a” relationship
+
+Composition means an object uses another object rather than inheriting from it.
+
+```csharp
+public class ReportService
+{
+    private readonly ITitleFormatter _formatter;
+
+    public ReportService(ITitleFormatter formatter)
+    {
+        _formatter = formatter;
+    }
+
+    public string CreateHeading(string title) => _formatter.Format(title);
+}
+```
+
+A report service **has a** formatter; it **is not a** formatter. Dependency injection is one way to supply that collaborator. Our services use DbContext this way.
+
+### Overload versus override versus hiding
+
+- **Overload:** same method name, different parameter signatures. The compiler selects the applicable signature. Changing only the return type is not enough.
+- **Override:** a derived class specializes an inherited virtual/abstract member. Runtime dispatch selects the implementation.
+- **Hiding with `new`:** a derived member hides a base member; this does not provide the same polymorphic behavior as overriding. Avoid it unless that distinction is intentional.
+
+```csharp
+public string Format(string title) => title.Trim();
+public string Format(string title, string prefix) => $"{prefix}: {title.Trim()}";
+```
+
+These are overloads intended to be declared inside a class.
+
+### Sealed
+
+`sealed class` prevents other classes from inheriting from that class. A `sealed override` prevents further derived classes from overriding that member again.
+
+```csharp
+public sealed class PlainTitleFormatter : ITitleFormatter
+{
+    public string Format(string title) => title.Trim();
+}
+```
+
+Sealed does not mean static or immutable. You can still create instances, and those instances may have mutable state.
+
+### Fields, properties, const, readonly, and init
+
+- A **field** stores a value directly, usually as private implementation detail.
+- A **property** controls access through `get`, `set`, or `init` accessors. An automatic property has compiler-generated backing storage.
+- `const` defines a compile-time constant; a class constant is accessed through its type.
+- `readonly` permits field assignment in its declaration or the relevant constructor, but prevents later reassignment.
+- `init` permits property assignment during object initialization, but not ordinary later reassignment.
+
+```csharp
+public class PagingOptions
+{
+    public const int MaximumPageSize = 100;
+    private readonly string _source;
+    public int PageSize { get; init; } = 20;
+
+    public PagingOptions(string source)
+    {
+        _source = source;
+    }
+}
+
+// Usage:
+var options = new PagingOptions("API") { PageSize = 10 };
+```
+
+A readonly field holding a list cannot be reassigned after construction, but the list's contents can still change. `readonly` and `init` do not automatically make an entire object graph immutable.
+
+### Class, struct, and record
+
+| Type | Main idea |
+| --- | --- |
+| `class` | Reference type; assignment copies the reference to an object |
+| `struct` | Value type; assignment copies its value |
+| `record` / `record class` | Reference type with generated value-based equality and other data-oriented features |
+| `record struct` | Value type with generated record features |
+
+With an ordinary class, two variables can refer to the same object. Changing that object's state through one reference is visible through the other.
+
+Copying a struct copies its fields. If a field itself holds a reference, the referenced object is still shared; this is not an automatic deep copy.
+
+```csharp
+public record ProjectSummary(Guid Id, string Name);
+```
+
+Records are useful for data carriers such as DTOs. They are not automatically deeply immutable. Record equality compares member values using those members' equality rules; it does not automatically compare every collection element structurally.
+
+### Lambdas and delegates
+
+A **delegate** represents a callable method with a particular signature. A **lambda** is a concise way to write an anonymous function.
+
+```csharp
+Func<string, bool> hasText = title => !string.IsNullOrWhiteSpace(title);
+bool valid = hasText("Fix login");
+```
+
+`Func<string, bool>` takes a string and returns a bool. `Action<string>` takes a string and returns no value.
+
+In `.Where(item => item.ProjectId == projectId)`, the lambda describes the condition. EF queries can capture it as an expression tree for SQL translation instead of simply running it as an in-memory delegate.
+
+### Exceptions and using
+
+`throw` reports a failure; `try`/`catch` handles an exception where useful recovery or translation is possible. `finally` runs when control leaves the try/catch, including during normal exception propagation.
+
+`using` has two different common meanings:
+
+```csharp
+using System.Text; // Namespace import.
+```
+
+```csharp
+using var stream = File.OpenRead("example.txt");
+// The stream is disposed when this scope ends.
+```
+
+Resource disposal releases things such as file handles or database connections. It is different from garbage collection, which manages memory. `await using` supports asynchronous disposal for types that implement it.
+
+### Quick keyword recap
+
+| Keyword | Remember it as |
+| --- | --- |
+| `static` | Belongs to the type, not an instance |
+| `abstract` | Incomplete base type or member requiring implementation |
+| `virtual` | Existing implementation may be overridden |
+| `override` | Specialize an inherited overridable member |
+| `sealed` | Stop inheritance or further overriding |
+| `interface` | Define a capability/contract |
+| `this` | The current object |
+| `base` | Access base-class behavior or constructor |
+| `readonly` | Prevent later field reassignment |
+| `const` | Compile-time constant |
+| `init` | Allow property assignment during initialization |
+
+## 20. Questions to answer in your own words
 
 - What is the difference between C#, .NET, and ASP.NET Core?
 - Why expose a Rename method instead of a public Title setter?
@@ -458,8 +798,15 @@ Common reminders:
 - Why is a valid login token insufficient for accessing every project?
 - What does an integration test check that a unit test might miss?
 - Why can a container disappear while its data remains?
+- How is a static method different from an instance method?
+- How is a static class different from a DI singleton?
+- When would you choose an interface instead of an abstract class?
+- What is the difference between virtual and abstract methods?
+- How is overriding different from overloading?
+- Why do we call base.OnModelCreating in our DbContext override?
+- Why does a readonly list field still allow adding list elements?
 
-## 20. Personal learning log template
+## 21. Personal learning log template
 
 Copy this section when you learn something new:
 

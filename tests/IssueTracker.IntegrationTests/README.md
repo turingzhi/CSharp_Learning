@@ -1,4 +1,6 @@
-# Project API integration tests
+# IssueTracker integration tests
+
+See the [project README](../../README.md) for application setup and the current API contract.
 
 Run from the solution root:
 
@@ -29,9 +31,11 @@ Coverage includes:
 - Validation Problem Details and rejected requests preserving existing data.
 - Updates of both fields, omitted/null description clearing, repeat updates, preserved identity and creation time.
 - URL ID taking precedence over extra body fields; another project remaining unchanged.
-- Real migrations and saved data surviving disposal and recreation of the API host.
+- A dedicated real-migration check, plus saved data surviving disposal and recreation of the API host.
 
-Each test case creates its own uniquely named temporary directory and SQLite database. `ApiFactory` overrides the connection string, checks that the resolved database path is correct, and applies the real migrations. Pooling is disabled so disposal can release and remove the test files. The restart test reuses only its own database across two hosts. Tests never use the development `issuetracker.db`.
+`ApiFactory` uses a temporary SQLite file (or a caller-supplied path for restart tests), disables connection pooling, and disables startup migrations. Its normal ready-client helper uses `EnsureCreatedAsync()` and authenticates the client. It does not replace production services or bypass authorization. Tests use their own databases, not the development `issuetracker.db`.
+
+`ApiTests.Migrations_CreateDatabase_AndProjectCanBeSavedAndRetrieved` separately uses `MigrateAsync()` against a fresh database and checks applied/pending migrations. The restart test in `ProjectApiTests` verifies persistence with `EnsureCreatedAsync()` despite its older `WithRealMigrations` method name. Do not treat that restart test as migration coverage.
 
 The milestone 5 tests additionally cover work-item title boundaries (1–200), comment body boundaries (1–2,000), parent-scoped lists, string enum JSON, all status transitions and no-ops, invalid/missing statuses, server-owned fields, missing parents/resources, and all three DELETE endpoints. Cascade tests inspect database rows and confirm unrelated projects/items/comments survive. Seed data is inserted through EF so failures in POST do not prevent independent testing of other routes.
 
@@ -41,8 +45,12 @@ Run milestone 5 additions alone:
 dotnet test tests/IssueTracker.IntegrationTests --filter "FullyQualifiedName~Milestone5ApiTests"
 ```
 
-Tests intentionally assert the learning guide's contract, so unfinished or incorrect routes should fail. The test host does not supply missing production service registrations or override enum serialization. See `MILESTONE5_RESULTS.md` for the latest recorded run and blockers.
+Tests intentionally assert the learning guide's contract, so unfinished or incorrect routes should fail. The test host does not supply missing production service registrations or override enum serialization. See [MILESTONE5_RESULTS.md](MILESTONE5_RESULTS.md) for an archived early run; its blockers are not a current status report.
 
-These tests do not cover future authentication, pagination, or TLS/network deployment. HTTPS client URLs avoid redirects in the in-process test server; they do not test certificates.
+`AuthorizationTests.cs` and `MembershipTests.cs` cover authentication, cross-project access, ownership, comment authorship, membership removal, and assignment. The milestone 5 tests consume the paged work-item response; this does not imply exhaustive pagination/filter coverage. These in-process tests do not cover Docker or TLS/network deployment. HTTPS client URLs avoid redirects in the in-process test server; they do not test certificates.
 
 The existing `IssueTracker.UnitTests` project remains separate and tests entity behavior directly.
+
+## Verification snapshot
+
+On 2026-10-05, `dotnet test IssueTracker.sln --no-restore --verbosity quiet -m:1` passed: **20 unit tests and 136 integration tests**, with no failures or skipped tests. This documents the current checkout; Docker and manual HTTPS smoke checks were not run during this documentation review.

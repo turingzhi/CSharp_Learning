@@ -1,4 +1,6 @@
-# Milestone 5 API test results
+# Milestone 5 API test results (historical)
+
+This is the original 2026-09-18 failure snapshot, preserved as a learning record. It is not the current project status: service registrations, comment routing, string-enum configuration, and other code have since changed. Run the commands in the [test guide](README.md) for fresh evidence.
 
 Run on 2026-09-18: **110 failed, 0 passed, 0 skipped** (48 existing project cases plus 62 new milestone 5 cases). The API and integration-test project compiled. No application implementation was changed during this review.
 
@@ -32,4 +34,4 @@ For a machine-readable report:
 dotnet test tests/IssueTracker.IntegrationTests --logger "trx;LogFileName=milestone5.trx"
 ```
 
-The latest raw results are under `TestResults/milestone5.trx` (ignored build output). Do not weaken assertions or add service registrations in the test factory to conceal application failures.
+The original report used `TestResults/milestone5.trx` (ignored build output). Do not weaken assertions or add service registrations in the test factory to conceal application failures.

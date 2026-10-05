@@ -1,5 +1,9 @@
 # Build IssueTracker from scratch: C#, .NET, and ASP.NET Core
 
+For the existing application, start with the [README](README.md). This guide preserves the incremental build exercises; earlier milestones are not the current API contract. Use [TAKEAWAYS](TAKEAWAYS.md) for concept explanations.
+
+The current code contains CRUD, pagination, Identity, project permissions, membership, assignment, health checks, and Docker support. Compare it with each milestone’s completion criteria rather than assuming every exercise is finished. The README records known gaps.
+
 This is a practical course for someone who knows another programming language and some basic C#. You will write the application. This guide supplies the design, setup commands, implementation order, starter tests, and completion criteria.
 
 Work one milestone at a time. Do not paste every future code block into the project on day one. Expect roughly 40–70 hours, depending on how much experimentation you do. Progress matters more than a deadline.
@@ -35,7 +39,7 @@ If stuck, ask for a hint, then an explanation, then a small example. Ask for a c
 
 ## 3. Prerequisites and first setup
 
-Install the [.NET 10 SDK](https://dotnet.microsoft.com/en-us/download/dotnet/10.0), Git, and a C# editor. The SDK includes tools needed to build applications; installing only a runtime is insufficient. Your current machine already has SDK 10.0.103.
+Install the [.NET 10 SDK](https://dotnet.microsoft.com/en-us/download/dotnet/10.0), Git, and a C# editor. The SDK includes tools needed to build applications; installing only a runtime is insufficient.
 
 The commands below use macOS/Linux shell syntax and run from the solution root unless a step says otherwise. Package restore needs internet access.
 
@@ -47,7 +51,7 @@ dotnet --list-sdks
 git --version
 ```
 
-From the folder where you want to keep the project, create a new directory:
+For a separate from-scratch exercise, create a new directory outside this existing solution. To run this checkout, use the README instead:
 
 ```bash
 mkdir IssueTracker
@@ -94,9 +98,9 @@ Create folders only when you need them. Start with the three projects above; add
 IssueTracker/
 ├── IssueTracker.sln
 ├── README.md
-├── LEARNING_LOG.md
+├── TAKEAWAYS.md                      # concepts and optional learning-log template
 ├── .gitignore
-├── .config/dotnet-tools.json          # added with EF tools
+├── dotnet-tools.json                  # existing checkout; new templates may use .config/
 ├── src/
 │   ├── IssueTracker.Core/
 │   │   ├── Entities/
@@ -198,10 +202,9 @@ Use `ArgumentException` for invalid titles and empty project IDs. Use `ArgumentO
 
 Implement `Project` and `Comment` with the same approach. Reuse title validation between the constructor and `Rename` without introducing an inheritance hierarchy.
 
-Copy the supplied `starter-tests/WorkItemTests.cs` into `tests/IssueTracker.UnitTests/`. If you created `IssueTracker` directly under the guide folder:
+The existing entity tests are in [WorkItemTests.cs](tests/IssueTracker.UnitTests/WorkItemTests.cs). There is no separate `starter-tests` directory in this checkout. When rebuilding elsewhere, use that file as a behavioral reference.
 
 ```bash
-cp ../starter-tests/WorkItemTests.cs tests/IssueTracker.UnitTests/
 dotnet test tests/IssueTracker.UnitTests
 ```
 
@@ -318,7 +321,7 @@ Use migrations for your development database. Do not mix `EnsureCreated` and mig
 
 Implement one resource at a time: projects, then work items, then comments. Keep controller methods short. Services check whether referenced resources exist; entity methods enforce entity rules.
 
-Before accounts are added, implement this contract:
+Before accounts are added, implement this contract. Milestone 7 changes the project work-item list to a paged response; milestone 8 adds authentication and permissions. See the [README API table](README.md#api-and-permissions) for current behavior:
 
 | Method and route | Successful response | Important failure |
 | --- | --- | --- |
@@ -387,15 +390,14 @@ At the very end of the API's `Program.cs`, after all top-level statements, add:
 public partial class Program { }
 ```
 
-Copy `starter-tests/ApiTests.cs` into the integration test project. It expects `IssueTracker.Api.Data.AppDbContext`, the connection-string name above, and the API contract from milestone 5. The factory uses a unique temporary SQLite file per test. It initializes that disposable database with `EnsureCreated`; your development database still uses migrations. It does not start a server on a network port. [ASP.NET Core integration testing](https://learn.microsoft.com/en-us/aspnet/core/test/integration-tests?view=aspnetcore-10.0).
+Use [ApiTests.cs](tests/IssueTracker.IntegrationTests/ApiTests.cs) as a reference when building your integration test project. The checked-in version already authenticates clients for milestone 8; adapt that helper only if rebuilding the earlier unauthenticated stage. It expects `IssueTracker.Api.Data.AppDbContext`, the connection-string name above, and the API contract from milestone 5. The factory uses a unique temporary SQLite file per test. It initializes that disposable database with `EnsureCreated`; your development database still uses migrations. It does not start a server on a network port. [ASP.NET Core integration testing](https://learn.microsoft.com/en-us/aspnet/core/test/integration-tests?view=aspnetcore-10.0).
 
 ```bash
-cp ../starter-tests/ApiTests.cs tests/IssueTracker.IntegrationTests/
 dotnet test tests/IssueTracker.IntegrationTests
 dotnet test
 ```
 
-The supplied integration tests cover project creation/readback, rejected names, missing resources, a rejected status transition, and cascade deletion. Add these yourself:
+The checked-in suite covers project creation/readback, rejected names, missing resources, a rejected status transition, and cascade deletion, with further coverage in the other test classes. For a from-scratch implementation, use these additional targets (many already exist in this checkout):
 
 - Work item creation under a missing project returns 404.
 - Full valid status sequence succeeds; repeating the current status succeeds.
@@ -569,6 +571,8 @@ Optional extensions after completion: a Blazor UI, PostgreSQL migration, optimis
 
 ## 16. Troubleshooting
 
+For current ports, database configuration, and commands, use [Run locally](README.md#run-locally).
+
 | Symptom | Check |
 | --- | --- |
 | `dotnet` not found | Install the SDK, then reopen the terminal. |
@@ -614,6 +618,6 @@ Start by checking my current code and help me complete the next unfinished step.
 
 ## 18. Your first session
 
-Do section 3, create the enum and `WorkItem` public interface from milestone 1, then copy and run the unit tests. Focus first on construction: valid title, generated ID, initial status, and rejected blank title. Implement status transitions after those pass. Stop there and review what you learned before moving on.
+If rebuilding from scratch, do section 3, create the enum and `WorkItem` public interface from milestone 1, then use the linked unit tests as your behavioral specification. Focus first on construction: valid title, generated ID, initial status, and rejected blank title. Implement status transitions after those pass. Stop there and review what you learned before moving on.
 
-The supplied starter tests are exercise files, not a claim that an application has already been implemented or that the suite has passed.
+The milestone checklist describes learning targets, not a record of a successful test run. The application and tests now exist in this checkout; run the suite to establish its current status.

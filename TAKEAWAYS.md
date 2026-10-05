@@ -2,6 +2,8 @@
 
 A plain-language reference for the C#, .NET, and backend concepts practiced in this project. Examples are learning snippets, not extra code you need to paste into the application.
 
+Use the [README](README.md) for setup, commands, API routes, and the current permission contract. Follow the [learning guide](LEARNING_GUIDE.md) for milestone exercises. This file keeps the explanations and personal learning-log template.
+
 ## 1. How the technologies fit together
 
 | Technology | What it does | Example in IssueTracker |
@@ -26,15 +28,7 @@ C# does not require a database, EF Core, or Docker. These tools solve separate p
 - A **namespace** organizes type names. A `using` directive lets you use those names without writing the full namespace; it does not install a library.
 - `bin/` contains build output. `obj/` contains intermediate build files.
 
-Our responsibilities:
-
-```text
-IssueTracker.Core              Domain objects and business rules
-IssueTracker.Playground        Console experiments
-IssueTracker.Api               HTTP, services, database, security
-IssueTracker.UnitTests         Small isolated behavior tests
-IssueTracker.IntegrationTests  Tests across application components
-```
+See the [README structure](README.md#structure) for the projects and their responsibilities.
 
 Keep generated build output out of Git. Keep source code and migration files in Git.
 
@@ -134,6 +128,7 @@ Our project-access filter also checks permissions against the actual project ass
 | GET | Read data |
 | POST | Create a resource or perform an operation |
 | PUT | Replace/update the resource represented by the endpoint |
+| PATCH | Apply a targeted change, such as a status transition |
 | DELETE | Remove a resource |
 
 | Status | Meaning in our API |
@@ -239,19 +234,7 @@ Migration files have different jobs:
 - Model snapshot: records the EF model used to calculate the next migration. It is not a copy of your database rows.
 - `__EFMigrationsHistory`: records migrations applied to a particular database.
 
-From the **IssueTracker solution folder**:
-
-```bash
-# Generate instructions; this does not update the database.
-dotnet ef migrations add DescribeYourChange \
-  --project src/IssueTracker.Api \
-  --startup-project src/IssueTracker.Api
-
-# Apply pending instructions to the configured database.
-dotnet ef database update \
-  --project src/IssueTracker.Api \
-  --startup-project src/IssueTracker.Api
-```
+See [Tests and publishing](README.md#tests-and-publishing) for migration commands. Generating a migration records instructions; applying it changes the database.
 
 Review generated migrations before applying them. Back up meaningful data before changes that might transform or remove it. A new row does not require a migration; a schema change usually does.
 
@@ -259,11 +242,11 @@ Review generated migrations before applying them. Back up meaningful data before
 
 SQLite has limitations when ordering some .NET date/time representations. We configured a conversion to integer ticks to support the required query behavior. The model still exposes a date/time value; the stored representation is different.
 
-The migration changes the column/storage schema. Existing values may need explicit data conversion; changing a column type alone does not guarantee old date strings become valid ticks. Our earlier check showed the table was empty before that change.
+The migration changes the column/storage schema. Existing values may need explicit data conversion; changing a column type alone does not guarantee old date strings become valid ticks. Check existing data before applying such a migration; a fresh database does not exercise conversion of older rows.
 
 ### Why Docker used migrations
 
-The container's new database volume started empty. Startup `MigrateAsync()` created its schema by applying migrations. Later starts apply only pending migrations.
+An empty database volume has no schema. With the startup migration option enabled, `MigrateAsync()` creates its schema by applying migrations. Later starts apply only pending migrations.
 
 `Database__ApplyMigrations=true` enabled this in our single-container learning setup. For multiple application instances, prefer a separate controlled deployment migration step.
 
@@ -278,15 +261,7 @@ Login produces credentials the client sends with later requests. The server vali
 
 Do not assume every bearer token is a JWT. The built-in Identity API bearer tokens used here are not standard JWTs.
 
-Our permission rules:
-
-- Creating a project makes the creator its Owner.
-- Owners manage membership; adding a member does not grant ownership.
-- Members access resources belonging to their projects.
-- Only eligible project members can be assigned a work item.
-- Removing a member clears their assignments in that project.
-- Owners cannot remove the project's owner membership through the member-removal endpoint.
-- Comment deletion checks the actual author or project owner.
+See the [README API and permissions](README.md#api-and-permissions) for the current access rules. The key distinction is that a valid login identifies the caller; project membership, role, and comment authorship determine what that caller may do.
 
 Knowing a resource ID is not permission. Check access on the server for each request, including nested resources and list endpoints. Membership checks also allow removal to take effect even while an old login token remains valid.
 
@@ -363,17 +338,7 @@ Our `/health` endpoint is a **liveness** check: the application can respond. It 
 
 ## 16. Build, run, test, and publish
 
-Run these from the **IssueTracker solution folder**:
-
-```bash
-dotnet restore
-dotnet build
-dotnet test
-dotnet run --project src/IssueTracker.Api --launch-profile https
-dotnet build -c Release
-dotnet test -c Release
-dotnet publish src/IssueTracker.Api -c Release -o publish
-```
+The commands are maintained in the [README](README.md#tests-and-publishing). Run them from the IssueTracker solution folder.
 
 - **Restore:** obtains project dependencies.
 - **Build:** compiles the code.
@@ -408,10 +373,10 @@ Our multi-stage Dockerfile uses the SDK image to build and the ASP.NET runtime i
 ```text
 Container can be removed and replaced
     ├── issuetracker-data volume → SQLite database survives
-    └── issuetracker-keys volume → authentication protection keys survive
+    └── separately configured key storage → authentication protection keys can survive
 ```
 
-Persistent protection keys let the replacement application validate still-valid protected credentials, provided its other protection settings remain compatible. They do not stop tokens from expiring.
+The current Docker command persists only the database. Key persistence is a deployment exercise, not an existing configured volume. Persistent protection keys let the replacement application validate still-valid protected credentials, provided its other protection settings remain compatible. They do not stop tokens from expiring.
 
 - `docker build -t issuetracker .` builds an image using the current folder as context.
 - `.dockerignore` excludes files from that build context.
@@ -619,6 +584,74 @@ Console.WriteLine(notification.Preview());
 
 **Abstract:** “You must provide an implementation before this can be a concrete class.”
 
+### Polymorphism: one contract, different behavior
+
+**Polymorphism means using a common type while getting behavior specific to the actual object.** The calling code can use the shared contract without knowing every implementation.
+
+```csharp
+public interface INotificationSender
+{
+    void Send(string message);
+}
+
+public class EmailSender : INotificationSender
+{
+    public void Send(string message)
+    {
+        Console.WriteLine($"Email: {message}");
+    }
+}
+
+public class SmsSender : INotificationSender
+{
+    public void Send(string message)
+    {
+        Console.WriteLine($"SMS: {message}");
+    }
+}
+```
+
+Use these types inside a method:
+
+```csharp
+INotificationSender sender = new EmailSender();
+sender.Send("Work item assigned"); // Email: Work item assigned
+
+sender = new SmsSender();
+sender.Send("Work item assigned"); // SMS: Work item assigned
+```
+
+The variable's **declared type** is `INotificationSender`. Its **actual object type** is first `EmailSender`, then `SmsSender`. The same `sender.Send(...)` call invokes the implementation on the actual object. These examples print messages; they do not send real email or SMS.
+
+Polymorphism also works through base classes and overrides:
+
+```csharp
+public class Animal
+{
+    public virtual string Speak() => "...";
+}
+
+public class Dog : Animal
+{
+    public override string Speak() => "Woof!";
+}
+
+// Usage inside a method:
+Animal animal = new Dog();
+Console.WriteLine(animal.Speak()); // Woof!
+```
+
+Although the variable is declared as `Animal`, the overridden behavior belongs to the `Dog` object.
+
+In a future IssueTracker notification feature, a service could receive `INotificationSender` through dependency injection and call `Send()` without an email/SMS `if-else` chain. Something must still choose the implementation: DI configuration can choose one for the application, or a selector can choose based on the recipient's preferences.
+
+Remember:
+
+- **Interface implementation:** fulfill a contract; no `override` keyword is needed for the interface method shown above.
+- **Virtual/abstract method overriding:** specialize inherited behavior using `override`.
+- **Overloading:** choose between different parameter signatures, usually at compile time; this is different from runtime dispatch to an object's override or interface implementation.
+- Polymorphism helps interchangeable behaviors. It does not replace ordinary validation such as checking whether a title is empty.
+
 ### Interfaces versus abstract classes
 
 An interface describes a capability that implementing types provide.
@@ -803,6 +836,8 @@ Resource disposal releases things such as file handles or database connections. 
 - When would you choose an interface instead of an abstract class?
 - What is the difference between virtual and abstract methods?
 - How is overriding different from overloading?
+- If an Animal variable holds a Dog object, which Speak implementation runs, and why?
+- How does using INotificationSender let a service work with different notification implementations?
 - Why do we call base.OnModelCreating in our DbContext override?
 - Why does a readonly list field still allow adding list elements?
 
